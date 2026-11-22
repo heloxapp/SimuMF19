@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Simulateur SAEIV – MF19</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0f12;--p:#161a20;--p2:#1d222a;--b:#2a303a;--t:#eceff4;--m:#97a1b0;--a:#ffc20e}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--t);font-family:'Fira Sans','Segoe UI',system-ui,sans-serif}
+button,select,input,textarea{font:inherit;color:inherit}
+h1{font-size:28px;margin:0 0 4px;letter-spacing:.2px}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:1.4px;color:var(--m);margin:34px 0 12px;font-weight:600}
+#home{max-width:1160px;margin:0 auto;padding:34px 22px 80px}
+.sub{color:var(--m);margin:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.card{background:var(--p);border:2px solid var(--b);border-radius:14px;padding:14px;cursor:pointer;position:relative;transition:.15s}
+.card:hover{border-color:#47505f}
+.card.sel{border-color:var(--a);background:var(--p2)}
+.card .top{display:flex;align-items:center;gap:12px}
+.card b{display:block;font-size:17px}
+.card small{color:var(--m);display:block;line-height:1.3;margin-top:2px}
+.card svg.mini{width:100%;height:22px;margin-top:12px;display:block}
+.card .del{position:absolute;top:6px;right:8px;background:none;border:0;color:var(--m);cursor:pointer;font-size:20px}
+.panel{background:var(--p);border:1px solid var(--b);border-radius:14px;padding:16px}
+.row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--m)}
+label.chk{flex-direction:row;align-items:center;gap:8px;padding-bottom:8px}
+select,input[type=number],input[type=time]{background:#0f1217;border:1px solid var(--b);border-radius:8px;padding:8px 10px;min-width:150px}
+textarea{width:100%;min-height:110px;background:#0f1217;border:1px solid var(--b);border-radius:8px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+.btn{background:#262c36;border:1px solid #38404d;border-radius:9px;padding:9px 14px;cursor:pointer}
+.btn:hover{background:#2f3642}
+.btn.go{background:var(--a);color:#111;border-color:var(--a);font-weight:700;font-size:17px;padding:13px 28px}
+.drop{border:2px dashed #3a4350;border-radius:12px;padding:18px;text-align:center;color:var(--m);margin-bottom:12px}
+.drop.over{border-color:var(--a);color:var(--t)}
+#msg{margin-top:10px;font-size:14px;min-height:20px}
+#msg.err{color:#ff8a8a}#msg.ok{color:#7be0a0}
+details{margin-top:14px;color:var(--m);font-size:13.5px}
+details summary{cursor:pointer;color:var(--t)}
+details pre{background:#0f1217;padding:12px;border-radius:8px;overflow:auto;color:#cfd6e2;font-size:12px;line-height:1.45}
+.launch{margin-top:28px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+#player{position:fixed;inset:0;background:#000;display:none;overflow:auto}
+#player.on{display:flex}
+#stageBox{margin:auto;flex:none}
+#stage{display:block;transform-origin:0 0}
+#bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:rgba(20,23,28,.93);border:1px solid #333b47;border-radius:14px;padding:8px 10px;transition:opacity .3s;max-width:96vw;z-index:5}
+#bar.hide{opacity:0;pointer-events:none}
+#bar .btn{padding:7px 11px}
+#bar select{min-width:0;padding:6px 8px}
+#info{font-size:13px;color:#aab3c1;max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes blink{0%{fill:var(--c)}50%{fill:#fff}100%{fill:#fff}}
+</style>
+</head>
+<body>
+
+<div id="home">
+  <h1>Simulateur SAEIV · MF19</h1>
+  <p class="sub">Écran d'information voyageurs à deux panneaux, recréé en SVG (2576 × 239 px). Choisis une ligne ou importe ton propre fichier <code>.json</code>.</p>
+
+  <h2>1 · Choisir une ligne</h2>
+  <div class="grid" id="cards"></div>
+
+  <h2>2 · Importer une ligne (.json)</h2>
+  <div class="panel">
+    <div class="drop" id="drop">Glisse un fichier <b>.json</b> ici, ou
+      <label class="btn" style="display:inline-block;margin-left:6px;cursor:pointer">choisir un fichier<input id="file" type="file" accept=".json,application/json" multiple hidden></label>
+    </div>
+    <textarea id="jsonText" placeholder='…ou colle ton JSON ici'></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="btnLoad">Charger ce JSON</button>
+      <button class="btn" id="btnTpl">Télécharger un modèle (ligne 10)</button>
+    </div>
+    <div id="msg"></div>
+    <details>
+      <summary>Format du fichier JSON</summary>
+<pre>{
+  "id": "10", "index": "10",             // texte de l'indice (ex. "3bis")
+  "color": "#DC9600", "textColor": "#000", // couleur de la ligne à l'écran
+  "route": [                              // arrêts dans l'ordre du sens 1
+    { "id":"a", "name":"Boulogne – Pont de Saint-Cloud",
+      "lines":["Boulogne","Pont de Saint-Cloud"],   // version sur 2 lignes (optionnel)
+      "tag":"UNESCO",                                // petit encart (optionnel)
+      "corr":{ "metro":["9"], "rer":["C"], "train":["L"], "tram":["T2"], "ter":true,
+               "short":{"line":"10","label":"Gare d'Austerlitz","dir":1} } },
+    { "fork":{ "taken":"lower",                      // branche empruntée dans le sens 1
+               "upper":[ {…arrêts…} ], "lower":[ {…arrêts…} ] } },
+    { "river":"La Seine" },                          // trait bleu (optionnel)
+    { "id":"z", "name":"Gare d'Austerlitz" }
+  ]
+}</pre>
+      <p>Un arrêt peut aussi être une simple chaîne (<code>"Odéon"</code>). Le sens 2 est déduit automatiquement (liste inversée, branche opposée). Couleurs des correspondances : palette métro / RER intégrée.</p>
+    </details>
+  </div>
+
+  <h2>3 · Réglages</h2>
+  <div class="panel">
+    <div class="row">
+      <label class="f">Sens
+        <select id="optDir"></select></label>
+      <label class="f">Affichage
+        <select id="optView">
+          <option value="A">Plan complet (libellés en diagonale)</option>
+          <option value="C">Prochains arrêts (libellés horizontaux)</option>
+          <option value="alt">Alterné automatiquement</option>
+        </select></label>
+      <label class="f">Trajet entre 2 arrêts (s)
+        <input id="optTravel" type="number" min="2" max="40" value="7"></label>
+      <label class="f">Arrêt en station (s)
+        <input id="optDwell" type="number" min="1" max="20" value="3.5" step="0.5"></label>
+      <label class="f">Heure affichée
+        <select id="optTime"><option value="real">Heure réelle</option><option value="fixed">Heure fixe</option></select></label>
+      <label class="f">Heure fixe
+        <input id="optFixed" type="time" value="14:32"></label>
+      <label class="f chk"><input id="optLoop" type="checkbox" checked> Reboucler (sens inverse au terminus)</label>
+    </div>
+  </div>
+
+  <div class="launch">
+    <button class="btn go" id="btnStart">▶ Lancer la simulation</button>
+    <span class="sub" id="selName"></span>
+  </div>
+</div>
+
+<div id="player">
+  <div id="stageBox"><svg id="stage" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2576 239" width="2576" height="239"></svg></div>
+  <div id="bar">
+    <button class="btn" id="bHome" title="Retour à l'accueil">⌂ Accueil</button>
+    <button class="btn" id="bRestart" title="Recommencer">⏮</button>
+    <button class="btn" id="bPrev" title="Arrêt précédent">◀</button>
+    <button class="btn" id="bPlay" title="Pause / lecture (espace)">⏸</button>
+    <button class="btn" id="bNext" title="Arrêt suivant">▶</button>
+    <select id="bSpeed" title="Vitesse"><option value="0.5">×0,5</option><option value="1" selected>×1</option><option value="2">×2</option><option value="4">×4</option></select>
+    <select id="bView" title="Affichage"><option value="A">Plan complet</option><option value="C">Prochains arrêts</option><option value="alt">Alterné</option></select>
+    <button class="btn" id="bDir" title="Inverser le sens">⇄ Sens</button>
+    <button class="btn" id="bSize" title="Ajusté / taille réelle">⤢</button>
+    <button class="btn" id="bFs" title="Plein écran (F)">⛶</button>
+    <span id="info"></span>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   CONSTANTES & OUTILS SVG
+   ===================================================================== */
+const W=2576,H=239,GAP0=1321,GAP1=1345;
+const NAVY='#0a0084',TRACK='#cfc8b6',PASSED='#b9b2a1';
+const FONT="'Fira Sans','Segoe UI','Helvetica Neue',Arial,sans-serif";
+const NS='http://www.w3.org/2000/svg';
+const $=s=>document.querySelector(s);
+
+function S(tag,a,parent,text){
+  const e=document.createElementNS(NS,tag);
+  if(a)for(const k in a)e.setAttribute(k,a[k]);
+  if(text!=null)e.textContent=String(text).replace(/'/g,'’');
+  if(parent)parent.appendChild(e);
+  return e;
+}
+const mctx=document.createElement('canvas').getContext('2d');
+function tw(t,size,weight){mctx.font=(weight||700)+' '+size+'px '+FONT;return mctx.measureText(t).width;}
+/* taille de police qui donne la largeur mesurée sur tes captures */
+function cal(t,w,wt){return 100*w/(tw(t,100,wt)||1);}
+function metrics(){return{
+  fsDir:cal("Gare d'Austerlitz",162,700),    /* nom de direction (bandeau) */
+  fsDirLbl:cal('Direction',50,600),
+  fsA:cal('Javel – André Citroën',117,700),  /* libellés diagonaux */
+  fsClock:cal('14:32',66,700),
+  fsC:cal('La Sorbonne',152,700),            /* libellés horizontaux */
+  fsB:cal("Gare d'Austerlitz",923,700),      /* grande direction */
+  fsBLbl:cal('Direction',106,600)
+};}
+const ptsStr=p=>p.map(q=>q.x.toFixed(1)+','+q.y.toFixed(1)).join(' ');
+const arr=v=>Array.isArray(v)?v:(v?[v]:[]);
+
+/* =====================================================================
+   PALETTE (métro / RER / tram) – [fond, texte]
+   ===================================================================== */
+const METRO={'1':['#FFCE00','#000'],'2':['#0064B0','#fff'],'3':['#9F9825','#000'],'3bis':['#98D4E2','#000'],
+ '4':['#C04191','#fff'],'5':['#F28E42','#000'],'6':['#83C491','#000'],'7':['#F3A4BA','#000'],'7bis':['#83C491','#000'],
+ '8':['#CEADD2','#000'],'9':['#D5C900','#000'],'10':['#E3B32A','#000'],'11':['#8D5E2A','#fff'],'12':['#00814F','#fff'],
+ '13':['#98D4E2','#000'],'14':['#662483','#fff'],'15':['#B90845','#fff'],'16':['#F3A4BA','#000'],'17':['#D5C900','#000'],'18':['#00A88F','#fff']};
+const RER={A:['#E3051C','#fff'],B:['#5291CE','#fff'],C:['#FFCE00','#000'],D:['#00814F','#fff'],E:['#C04191','#fff'],
+ H:['#8D5E2A','#fff'],J:['#D5C900','#000'],K:['#9F9825','#fff'],L:['#CEADD2','#000'],N:['#00A88F','#fff'],
+ P:['#F28E42','#000'],R:['#F3A4BA','#000'],U:['#B90845','#fff']};
+const TRAM={T1:'#003CA6',T2:'#CF009E',T3a:'#F28E42',T3b:'#00A88F',T4:'#E3B32A',T5:'#5E1F8E',T6:'#E2231A',T7:'#704B1C',
+ T8:'#837902',T9:'#C04191',T10:'#C5A3CA',T11:'#F58A1F',T12:'#B90845',T13:'#2A72BA'};
+
+/* =====================================================================
+   DONNÉES DES LIGNES (d'après tes images)
+   ===================================================================== */
+const LINE10={id:'10',index:'10',color:'#DC9600',textColor:'#000000',route:[
+ {id:'bpsc',name:'Boulogne – Pont de Saint-Cloud',lines:['Boulogne','Pont de Saint-Cloud'],corr:{tram:['T2']}},
+ {id:'bjj',name:'Boulogne – Jean Jaurès',lines:['Boulogne','Jean Jaurès'],corr:{short:{line:'10',label:"Gare d'Austerlitz",dir:1}}},
+ {fork:{taken:'lower',
+  upper:[
+   {id:'pauteuil',name:"Porte d'Auteuil"},
+   {id:'maauteuil',name:'Michel-Ange – Auteuil',lines:['Michel-Ange','Auteuil'],corr:{metro:['9']}},
+   {id:'eauteuil',name:"Église d'Auteuil",lines:['Église',"d'Auteuil"]}],
+  lower:[
+   {id:'mamolitor',name:'Michel-Ange – Molitor',lines:['Michel-Ange','Molitor'],corr:{metro:['9']}},
+   {id:'chardon',name:'Chardon Lagache'},
+   {id:'mirabeau',name:'Mirabeau'}]}},
+ {river:'La Seine'},
+ {id:'javel',name:'Javel – André Citroën',corr:{rer:['C'],short:{line:'10',label:'Boulogne Pont de Saint-Cloud',dir:1}}},
+ {id:'cmichels',name:'Charles Michels'},
+ {id:'zola',name:'Avenue Émile Zola'},
+ {id:'lamotte',name:'La Motte-Piquet – Grenelle',lines:['La Motte-Piquet','Grenelle'],corr:{metro:['6','8']}},
+ {id:'segur',name:'Ségur',tag:'UNESCO'},
+ {id:'duroc',name:'Duroc',corr:{metro:['13']}},
+ {id:'vaneau',name:'Vaneau'},
+ {id:'sevres',name:'Sèvres – Babylone',corr:{metro:['12']}},
+ {id:'mabillon',name:'Mabillon'},
+ {id:'odeon',name:'Odéon',corr:{metro:['4']}},
+ {id:'cluny',name:'Cluny – La Sorbonne',lines:['Cluny','La Sorbonne'],corr:{rer:['B','C']}},
+ {id:'maubert',name:'Maubert – Mutualité',lines:['Maubert','Mutualité']},
+ {id:'cardinal',name:'Cardinal Lemoine',lines:['Cardinal','Lemoine']},
+ {id:'jussieu',name:'Jussieu',corr:{metro:['7']}},
+ {id:'austerlitz',name:"Gare d'Austerlitz",lines:['Gare',"d'Austerlitz"],corr:{metro:['5'],rer:['C'],ter:true}}
+]};
+
+const LINE1={id:'1',index:'1',color:'#FFCE00',textColor:'#000000',route:[
+ {name:'La Défense',tag:'Grande Arche',corr:{rer:['A','E'],train:['L','U'],tram:['T2']}},
+ {name:'Esplanade de La Défense',lines:['Esplanade','de La Défense']},
+ {name:'Pont de Neuilly'},
+ {name:'Les Sablons',tag:"Jardin d'Acclimatation"},
+ {name:'Porte Maillot',tag:'Palais des Congrès',corr:{rer:['C','E'],tram:['T3b']}},
+ {name:'Argentine'},
+ {name:'Charles de Gaulle – Étoile',lines:['Charles de Gaulle','Étoile'],corr:{metro:['2','6'],rer:['A']}},
+ {name:'George V'},
+ {name:'Franklin D. Roosevelt',corr:{metro:['9']}},
+ {name:'Champs-Élysées – Clemenceau',lines:['Champs-Élysées','Clemenceau'],tag:'Grand Palais',corr:{metro:['13']}},
+ {name:'Concorde',corr:{metro:['8','12']}},
+ {name:'Tuileries'},
+ {name:'Palais Royal – Musée du Louvre',lines:['Palais Royal','Musée du Louvre'],corr:{metro:['7']}},
+ {name:'Louvre – Rivoli'},
+ {name:'Châtelet',corr:{metro:['4','7','11','14'],rer:['A','B','D']}},
+ {name:'Hôtel de Ville',corr:{metro:['11']}},
+ {name:'Saint-Paul',tag:'Le Marais'},
+ {name:'Bastille',corr:{metro:['5','8']}},
+ {name:'Gare de Lyon',lines:['Gare','de Lyon'],corr:{metro:['14'],rer:['A','D'],train:['R'],ter:true}},
+ {name:'Reuilly – Diderot',corr:{metro:['8']}},
+ {name:'Nation',corr:{metro:['2','6','9'],rer:['A']}},
+ {name:'Porte de Vincennes',corr:{tram:['T3a','T3b']}},
+ {name:'Saint-Mandé'},
+ {name:'Bérault'},
+ {name:'Château de Vincennes',lines:['Château','de Vincennes'],corr:{rer:['A']}}
+]};
+
+const LINE14={id:'14',index:'14',color:'#662483',textColor:'#ffffff',route:[
+ {name:'Mairie de Saint-Ouen',lines:['Mairie de','Saint-Ouen'],corr:{metro:['13']}},
+ {name:'Saint-Ouen',corr:{rer:['C']}},
+ {name:'Porte de Clichy',tag:'Tribunal de Paris',corr:{metro:['13'],rer:['C'],tram:['T3b']}},
+ {name:'Pont Cardinet',corr:{train:['L']}},
+ {name:'Saint-Lazare',corr:{metro:['3','9','12','13'],rer:['E'],train:['J','L'],ter:true}},
+ {name:'Madeleine',corr:{metro:['8','12']}},
+ {name:'Pyramides',corr:{metro:['7']}},
+ {name:'Châtelet',corr:{metro:['1','4','7','11'],rer:['A','B','D']}},
+ {name:'Gare de Lyon',lines:['Gare','de Lyon'],corr:{metro:['1'],rer:['A','D'],train:['R'],ter:true}},
+ {name:'Bercy',corr:{metro:['6'],ter:true}},
+ {name:'Cour Saint-Émilion',lines:['Cour','Saint-Émilion']},
+ {name:'Bibliothèque François Mitterrand',lines:['Bibliothèque','François Mitterrand'],corr:{rer:['C'],tram:['T3a']}},
+ {name:'Olympiades'}
+]};
+
+/* =====================================================================
+   NORMALISATION D'UNE LIGNE (JSON importé ou intégré)
+   ===================================================================== */
+function normalizeLine(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('Le JSON doit être un objet { … }.');
+  const route=raw.route||raw.stations;
+  if(!Array.isArray(route))throw new Error('Champ "route" (liste des arrêts) manquant.');
+  const idx=String(raw.index??raw.line??raw.id??'?');
+  const known=METRO[idx];
+  const line={id:String(raw.id??idx),index:idx,
+    color:raw.color||(known?known[0]:'#DC9600'),
+    textColor:raw.textColor||(known?known[1]:'#000000'),route:[]};
+  let n=0;
+  const fix=(s,where)=>{
+    if(typeof s==='string')s={name:s};
+    if(!s||typeof s.name!=='string'||!s.name.trim())throw new Error('Arrêt sans "name" ('+where+').');
+    const o=Object.assign({},s);
+    o.id=o.id||('s'+(++n));
+    if(o.lines&&(!Array.isArray(o.lines)||!o.lines.length))delete o.lines;
+    return o;
+  };
+  route.forEach((it,i)=>{
+    if(it&&it.fork){
+      const f=it.fork;
+      if(!Array.isArray(f.upper)||!Array.isArray(f.lower))throw new Error('"fork" doit contenir "upper" et "lower" (listes).');
+      line.route.push({fork:{taken:f.taken==='upper'?'upper':'lower',
+        upper:f.upper.map(s=>fix(s,'fork.upper')),lower:f.lower.map(s=>fix(s,'fork.lower'))}});
+    }else if(it&&it.river!==undefined){
+      line.route.push({river:String(it.river)});
+    }else line.route.push(fix(it,'position '+(i+1)));
+  });
+  const stops=stopsOf(toNodes(line,0));
+  if(stops.length<2)throw new Error('Il faut au moins 2 arrêts.');
+  line.termA=stops[0].name;line.termB=stops[stops.length-1].name;
+  return line;
+}
+function toNodes(line,dir){
+  const nodes=line.route.map(n=>n.fork?{kind:'fork',taken:n.fork.taken,upper:n.fork.upper,lower:n.fork.lower}
+    :n.river!==undefined?{kind:'river',label:n.river}:{kind:'st',st:n});
+  if(dir===0)return nodes;
+  return nodes.reverse().map(n=>n.kind==='fork'
+    ?{kind:'fork',taken:n.taken==='lower'?'upper':'lower',upper:n.upper.slice().reverse(),lower:n.lower.slice().reverse()}:n);
+}
+function stopsOf(nodes){
+  const out=[];
+  for(const n of nodes){if(n.kind==='st')out.push(n.st);else if(n.kind==='fork')for(const s of n[n.taken])out.push(s);}
+  return out;
+}
+function hasCorr(st){
+  const c=st.corr;if(!c)return false;
+  return arr(c.metro).length+arr(c.rer).length+arr(c.train).length+arr(c.tram).length>0||!!c.ter;
+}
+
+/* =====================================================================
+   GÉOMÉTRIE : polyligne, distance, projection
+   ===================================================================== */
+function cumLen(p){const c=[0];for(let i=1;i<p.length;i++)c.push(c[i-1]+Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y));return c;}
+function ptAt(p,c,d){
+  if(d<=0)return p[0];const L=c[c.length-1];if(d>=L)return p[p.length-1];
+  let i=1;while(c[i]<d)i++;
+  const t=(d-c[i-1])/((c[i]-c[i-1])||1);
+  return{x:p[i-1].x+(p[i].x-p[i-1].x)*t,y:p[i-1].y+(p[i].y-p[i-1].y)*t};
+}
+function partial(p,c,d){
+  const out=[p[0]];
+  for(let i=1;i<p.length;i++){if(c[i]<=d)out.push(p[i]);else{out.push(ptAt(p,c,d));break;}}
+  return out.length<2?[p[0],p[0]]:out;
+}
+function projDist(p,c,q){
+  let best=1e9,bd=0;
+  for(let i=1;i<p.length;i++){
+    const ax=p[i-1].x,ay=p[i-1].y,dx=p[i].x-ax,dy=p[i].y-ay,l2=dx*dx+dy*dy||1;
+    let t=((q.x-ax)*dx+(q.y-ay)*dy)/l2;t=Math.max(0,Math.min(1,t));
+    const dd=Math.hypot(q.x-(ax+t*dx),q.y-(ay+t*dy));
+    if(dd<best){best=dd;bd=c[i-1]+t*Math.sqrt(l2);}
+  }
+  return bd;
+}
+const ease=t=>0.7*t+0.3*(0.5-0.5*Math.cos(Math.PI*t));
+
+/* =====================================================================
+   MISE EN PAGE DU PLAN COMPLET (mode A)
+   ===================================================================== */
+function layoutA(nodes){
+  const X0=180,X1=2439,YT=160,YL=184,YU=137;
+  let u=0,first=true,afterFork=false;const items=[];
+  for(const n of nodes){
+    if(n.kind==='river'){items.push({n});continue;}
+    if(n.kind==='fork'){
+      const k=Math.max(n.upper.length,n.lower.length,1);
+      const u0=u+0.8,u1=u0+1.2*k+2.1;items.push({n,u0,u1});u=u1+0.22;afterFork=true;continue;
+    }
+    if(!first&&!afterFork)u+=1;
+    first=false;afterFork=false;items.push({n,u});
+  }
+  const uEnd=Math.max(u,1e-4);
+  let xOf=q=>X0+q*(X1-X0)/uEnd;
+  /* aucune station ne doit tomber sous la bande noire centrale */
+  for(const it of items){
+    if(it.n.kind==='st'&&it.u>0&&it.u<uEnd){
+      const x=xOf(it.u);
+      if(x>GAP0-34&&x<GAP1+34){
+        const xk=GAP1+24,uk=it.u,b=xOf;
+        xOf=q=>q<uk?b(q):xk+(q-uk)*(X1-xk)/(uEnd-uk);
+        break;
+      }
+    }
+  }
+  const pos=new Map(),pts=[],ghosts=[],chev=[];
+  let river=null,pendingRiver=null,lastX=X0,firstSt=true;
+  for(const it of items){
+    const n=it.n;
+    if(n.kind==='river'){pendingRiver=n.label;continue;}
+    if(n.kind==='st'){
+      const x=xOf(it.u);pos.set(n.st,{x,y:YT});
+      if(firstSt){pts.push({x,y:YT});firstSt=false;}
+      if(pendingRiver!==null){river={x:(lastX+x)/2,label:pendingRiver};pendingRiver=null;}
+      lastX=x;
+      if(pts[pts.length-1].x<x)pts.push({x,y:YT});else pts[pts.length-1]={x,y:YT};
+      continue;
+    }
+    /* fork */
+    const x0=xOf(it.u0),x1=xOf(it.u1);
+    if(pendingRiver!==null){river={x:x0+29,label:pendingRiver};pendingRiver=null;}
+    const yT=n.taken==='lower'?YL:YU,yG=n.taken==='lower'?YU:YL;
+    const mk=y=>[{x:x0,y:YT},{x:x0+32,y},{x:x1-35,y},{x:x1,y:YT}];
+    if(firstSt){pts.push({x:x0,y:YT});firstSt=false;}
+    for(const q of mk(yT))pts.push(q);
+    ghosts.push({pts:mk(yG)});
+    const in0=x0+32,in1=x1-35;
+    for(const side of['upper','lower']){
+      const y=side==='lower'?YL:YU,ghost=side!==n.taken,list=n[side];
+      list.forEach((s,j)=>{
+        const x=in0+(j+0.66)/list.length*(in1-in0);
+        pos.set(s,{x,y,ghost,inFork:true});lastX=Math.max(lastX,x);
+      });
+    }
+    chev.push({x:x0,taken:n.taken});
+  }
+  return{pos,pts,ghosts,chev,river};
+}
+
+/* =====================================================================
+   ICÔNES (indice de ligne, correspondances)
+   ===================================================================== */
+function roundel(g,cx,cy,r){
+  const sw=r*0.16;
+  S('circle',{cx,cy,r:r-sw/2,fill:'#fff',stroke:NAVY,'stroke-width':sw},g);
+  S('text',{x:cx,y:cy+r*0.5,'text-anchor':'middle','font-size':r*1.42,'font-weight':500,fill:NAVY,'font-family':FONT},g,'M');
+}
+function indexBadge(g,cx,cy,r,line){
+  S('circle',{cx,cy,r,fill:line.color},g);
+  const m=String(line.index).match(/^(\d+)\s*(bis|ter)$/i),num=m?m[1]:String(line.index);
+  const fs=r*(num.length>1?1.38:1.52);
+  const t=S('text',{x:cx,y:cy+fs*0.36,'text-anchor':'middle','font-size':fs,'font-weight':700,fill:line.textColor,'font-family':FONT},g,num);
+  if(m)S('tspan',{'font-size':fs*0.42,dy:fs*0.04},t,m[2].toLowerCase());
+}
+function sBadge(g,cx,cy,R,label,c){
+  S('circle',{cx,cy,r:R,fill:c[0]},g);
+  S('text',{x:cx,y:cy+R*0.36,'text-anchor':'middle','font-size':label.length>2?R*0.95:R*1.25,'font-weight':700,fill:c[1],'font-family':FONT},g,label);
+}
+function sSquare(g,cx,cy,s,label,c){
+  S('rect',{x:cx-s/2,y:cy-s/2,width:s,height:s,rx:s*0.22,fill:c[0]},g);
+  S('text',{x:cx,y:cy+s*0.34,'text-anchor':'middle','font-size':s*0.8,'font-weight':700,fill:c[1],'font-family':FONT},g,label);
+}
+function railBox(g,cx,cy,label){
+  S('rect',{x:cx-7.5,y:cy-4.6,width:15,height:9.2,rx:2,fill:'#fff',stroke:NAVY,'stroke-width':0.9},g);
+  S('text',{x:cx,y:cy+2,'text-anchor':'middle','font-size':5.6,'font-weight':700,fill:NAVY,'font-family':FONT},g,label);
+}
+function glyph(g,cx,cy,kind){
+  S('rect',{x:cx-5.5,y:cy-4.6,width:11,height:9.2,rx:2.4,fill:'#fff',stroke:NAVY,'stroke-width':0.9},g);
+  if(kind==='train'){S('circle',{cx:cx-2.2,cy:cy+1.2,r:0.9,fill:NAVY},g);S('circle',{cx:cx+2.2,cy:cy+1.2,r:0.9,fill:NAVY},g);S('line',{x1:cx-3,y1:cy-1.8,x2:cx+3,y2:cy-1.8,stroke:NAVY,'stroke-width':1},g);}
+  else{S('line',{x1:cx-3,y1:cy-1.5,x2:cx+3,y2:cy-1.5,stroke:NAVY,'stroke-width':1},g);S('line',{x1:cx-2.5,y1:cy+1.8,x2:cx+2.5,y2:cy+1.8,stroke:NAVY,'stroke-width':1},g);}
+}
+function corrIcons(g,st,x,y,op,dir){
+  const c=st.corr;if(!c)return;
+  const G=S('g',{opacity:op==null?1:op},g);
+  const R=4.8,ROW=13;let ry=y;
+  for(const s of arr(c.short)){
+    if(s.dir!=null&&s.dir!==dir+1)continue;
+    roundel(G,x,ry,R);sBadge(G,x+R*2+2.5,ry,R,String(s.line),METRO[s.line]||['#999','#000']);
+    S('text',{x:x+R*3+5.5,y:ry+1.9,'font-size':5.2,'font-weight':600,fill:NAVY,'font-family':FONT},G,s.label||'');
+    ry+=ROW;
+  }
+  if(arr(c.metro).length){
+    roundel(G,x,ry,R);let cx=x+R*2+2.5;
+    for(const l of arr(c.metro)){sBadge(G,cx,ry,R,String(l),METRO[l]||['#999','#000']);cx+=R*2+2;}
+    ry+=ROW;
+  }
+  if(arr(c.rer).length){
+    railBox(G,x,ry,'RER');let cx=x+14.6;
+    for(const l of arr(c.rer)){sSquare(G,cx,ry,9.2,String(l),RER[l]||['#999','#000']);cx+=11.8;}
+    ry+=ROW;
+  }
+  if(arr(c.train).length){
+    glyph(G,x,ry,'train');let cx=x+12.6;
+    for(const l of arr(c.train)){sSquare(G,cx,ry,9.2,String(l),RER[l]||['#999','#000']);cx+=11.8;}
+    ry+=ROW;
+  }
+  if(c.ter){railBox(G,x,ry,'TER');ry+=ROW;}
+  if(arr(c.tram).length){
+    glyph(G,x,ry,'tram');let cx=x+9;
+    for(const l of arr(c.tram)){
+      const w=tw(String(l),6.8,700);
+      S('text',{x:cx,y:ry+2.4,'font-size':6.8,'font-weight':700,fill:NAVY,'font-family':FONT},G,String(l));
+      S('rect',{x:cx,y:ry+3.7,width:w,height:1.5,fill:TRAM[l]||'#999'},G);
+      cx+=w+4;
+    }
+    ry+=ROW;
+  }
+}
+
+/* =====================================================================
+   ÉTAT DE LA SIMULATION
+   ===================================================================== */
+const sim={line:null,dir:0,nodes:null,stops:null,lay:null,cum:null,D:null,idxOf:null,termName:'',
+  stage:'welcome',stageT:0,idx:0,phase:'dwell',phaseT:0,runT:0,paused:false,speed:1,view:'A',curView:'A',size:'fit'};
+const opts={travel:7,dwell:3.5,loop:true,timeMode:'real',fixed:'14:32'};
+const T_WELCOME=4,T_DIR=5,T_END=6;
+let dyn={};
+let running=false;
+
+function timeStr(){
+  if(opts.timeMode==='fixed'&&/^\d\d:\d\d$/.test(opts.fixed))return opts.fixed;
+  const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+
+function setup(line,dir){
+  sim.line=line;sim.dir=dir;
+  sim.nodes=toNodes(line,dir);sim.stops=stopsOf(sim.nodes);
+  sim.idxOf=new Map(sim.stops.map((s,i)=>[s,i]));
+  sim.lay=layoutA(sim.nodes);sim.cum=cumLen(sim.lay.pts);
+  sim.D=sim.stops.map(s=>projDist(sim.lay.pts,sim.cum,sim.lay.pos.get(s)));
+  sim.termName=sim.stops[sim.stops.length-1].name;
+  sim.idx=0;sim.phase='dwell';sim.phaseT=0;sim.runT=0;sim.stage='welcome';sim.stageT=0;
+}
+
+/* =====================================================================
+   COMMUN : cadre, logo, bandeau, heure
+   ===================================================================== */
+function chrome(g,o){
+  const M=metrics(),L=sim.line;
+  S('rect',{x:0,y:0,width:W,height:H,fill:'#151515'},g);
+  S('rect',{x:10,y:10,width:2556,height:218,fill:o.bg},g);
+  S('rect',{x:100,y:10,width:2466,height:42,fill:o.band==='line'?L.color:'#fff'},g);
+  if(o.band!=='line')S('line',{x1:100,y1:52.5,x2:2566,y2:52.5,stroke:'#c4c4c4','stroke-width':1},g);
+  S('rect',{x:10,y:10,width:90,height:218,fill:'#fff'},g);
+  S('rect',{x:10,y:10,width:90,height:8,fill:NAVY},g);
+  S('line',{x1:100.5,y1:18,x2:100.5,y2:228,stroke:'#bdbdbd','stroke-width':1},g);
+  roundel(g,56,99,29);
+  indexBadge(g,55,168,30,L);
+  if(o.dir){
+    S('text',{x:120,y:36,'font-size':M.fsDirLbl,'font-weight':600,fill:'#595959','font-family':FONT},g,'Direction');
+    S('text',{x:191,y:38.5,'font-size':M.fsDir,'font-weight':700,fill:NAVY,'font-family':FONT},g,sim.termName);
+  }
+  S('rect',{x:2472,y:10,width:94,height:42,fill:'#000'},g);
+  S('text',{x:2519,y:40.5,'text-anchor':'middle','font-size':M.fsClock,'font-weight':700,fill:'#FFC20E','font-family':FONT,class:'clock',style:'font-variant-numeric:tabular-nums'},g,timeStr());
+}
+function gapBar(g){S('rect',{x:GAP0,y:0,width:GAP1-GAP0,height:H,fill:'#000'},g);}
+
+/* =====================================================================
+   ÉCRAN : BIENVENUE
+   ===================================================================== */
+function drawWelcome(g){
+  chrome(g,{band:'line',bg:'#eeeeee',dir:false});
+  const txt='Bienvenue sur la ligne',fs=cal(txt,760,700),w=tw(txt,fs,700),r=w*0.0615;
+  const total=w+r*0.55+r*2,x=(100+GAP0)/2-total/2,cy=140;
+  S('text',{x,y:cy+fs*0.36,'font-size':fs,'font-weight':700,fill:NAVY,'font-family':FONT},g,txt);
+  indexBadge(g,x+w+r*0.55+r,cy,r,sim.line);
+  gapBar(g);
+}
+
+/* =====================================================================
+   ÉCRAN : GRANDE DIRECTION
+   ===================================================================== */
+function drawBig(g){
+  const M=metrics();
+  chrome(g,{band:'line',bg:'#f7f7f7',dir:false});
+  let fs=M.fsB;const maxW=GAP0-385-14,w=tw(sim.termName,fs,700);
+  if(w>maxW)fs*=maxW/w;
+  S('text',{x:175,y:152,'font-size':M.fsBLbl,'font-weight':600,fill:'#595959','font-family':FONT},g,'Direction');
+  S('text',{x:385,y:183,'font-size':fs,'font-weight':700,fill:NAVY,'font-family':FONT},g,sim.termName);
+  gapBar(g);
+}
+
+/* =====================================================================
+   ÉCRAN : PLAN COMPLET (mode A)
+   ===================================================================== */
+function labelA(g,st,p,style,M){
+  const pill=style.indexOf('pill')===0;
+  const lines=(pill||p.inFork||st.name.length>21)&&st.lines&&st.lines.length>1?st.lines:[st.name];
+  const fs=M.fsA,lh=fs*1.12;
+  const gr=S('g',{transform:'translate('+(p.x-4)+','+(p.y-12)+') rotate(-28)'},g);
+  const w=Math.max.apply(null,lines.map(l=>tw(l,fs,700)));
+  if(pill){
+    const bg=style==='pillWhite'?'#fff':style==='pillBlack'?'#000':'#c6c6c6';
+    const top=-(lines.length-1)*lh-fs*0.78-4.5,h=(lines.length-1)*lh+fs*0.78+9.5;
+    S('rect',{x:-7,y:top,width:w+16,height:h,rx:Math.min(9,h/2),fill:bg},gr);
+  }
+  const fill=style==='pillWhite'?'#000':pill?'#fff':style==='passed'?'#8b8b8b':style==='ghost'?'#9c9c9c':NAVY;
+  lines.forEach((l,i)=>S('text',{x:0,y:-(lines.length-1-i)*lh,'font-size':fs,'font-weight':style==='ghost'?500:700,fill,'font-family':FONT},gr,l));
+  if(st.tag&&!pill){
+    const tf=fs*0.56,tww=tw(st.tag,tf,600);
+    S('rect',{x:w+8,y:-tf-2.6,width:tww+7,height:tf+5,rx:2,fill:'none',stroke:style==='ghost'||style==='passed'?'#9c9c9c':NAVY,'stroke-width':0.8},gr);
+    S('text',{x:w+11.5,y:-1.2,'font-size':tf,'font-weight':600,'font-style':'italic',fill:style==='ghost'||style==='passed'?'#9c9c9c':NAVY,'font-family':FONT},gr,st.tag);
+  }
+}
+function dotA(g,st,p,st8,isTerm){
+  const inter=hasCorr(st),col=sim.line.color;
+  if(st8==='ghost'||st8==='passed'){
+    S('circle',{cx:p.x,cy:p.y,r:4.2,fill:inter?'#eceae4':PASSED,stroke:inter?'#a39d8e':'#d9d3c4','stroke-width':1.3},g);return;
+  }
+  if(st8==='next'){
+    S('circle',{cx:p.x,cy:p.y,r:4.7,fill:col,stroke:'#000','stroke-width':1.5,style:'animation:blink 1s steps(1,end) infinite;--c:'+col},g);return;
+  }
+  if(st8==='here'){S('circle',{cx:p.x,cy:p.y,r:4.7,fill:col,stroke:'#000','stroke-width':1.6},g);return;}
+  if(isTerm){
+    S('circle',{cx:p.x,cy:p.y,r:4.9,fill:'#fff',stroke:'#000','stroke-width':1.8},g);
+    S('circle',{cx:p.x,cy:p.y,r:2.2,fill:col},g);return;
+  }
+  if(inter)S('circle',{cx:p.x,cy:p.y,r:4.5,fill:'#fff',stroke:'#000','stroke-width':1.5},g);
+  else S('circle',{cx:p.x,cy:p.y,r:4.4,fill:col,stroke:'rgba(255,255,255,.7)','stroke-width':1.4},g);
+}
+function drawMapA(g){
+  const M=metrics(),L=sim.line,col=L.color,lay=sim.lay,stops=sim.stops;
+  const cur=sim.idx,trav=sim.phase==='travel',last=stops.length-1;
+  const doneUntil=trav?cur:cur-1,nextI=trav?cur+1:-1,hereI=trav?-1:cur;
+  chrome(g,{band:'#fff',bg:'#d9d9d9',dir:true});
+  const m=S('g',{},g);
+  /* la Seine */
+  if(lay.river){
+    const rx=lay.river.x,defs=S('defs',{},m);
+    const f=S('filter',{id:'glow',x:'-400%',y:'-5%',width:'900%',height:'110%'},defs);
+    S('feGaussianBlur',{stdDeviation:3},f);
+    S('rect',{x:rx-3,y:62,width:6,height:156,fill:'#4db3ff',filter:'url(#glow)',opacity:.9},m);
+    S('rect',{x:rx-1.2,y:66,width:2.4,height:148,fill:'#8fd3ff'},m);
+    S('text',{x:rx,y:223,'text-anchor':'middle','font-size':8,fill:'#3a8fd0','font-family':FONT},m,lay.river.label);
+  }
+  /* branches non empruntées, ligne, partie déjà parcourue */
+  for(const gh of lay.ghosts)S('polyline',{points:ptsStr(gh.pts),fill:'none',stroke:TRACK,'stroke-width':6,'stroke-linejoin':'round','stroke-linecap':'round'},m);
+  S('polyline',{points:ptsStr(lay.pts),fill:'none',stroke:col,'stroke-width':6,'stroke-linejoin':'round'},m);
+  const d0=sim.D[cur];
+  dyn.grey=S('polyline',{points:ptsStr(partial(lay.pts,sim.cum,d0)),fill:'none',stroke:TRACK,'stroke-width':6,'stroke-linejoin':'round'},m);
+  /* chevrons de bifurcation */
+  for(const c of lay.chev){
+    const sgn=c.taken==='lower'?1:-1;
+    const tri=(x,y,dirR,fill)=>S('polygon',{points:dirR?(x-3+','+(y-3.5)+' '+(x+3.5)+','+y+' '+(x-3)+','+(y+3.5)):((x+3)+','+(y-3.5)+' '+(x-3.5)+','+y+' '+(x+3)+','+(y+3.5)),fill},m);
+    tri(c.x+10,160+sgn*15,true,'#4a4a4a');
+    tri(c.x+10,160-sgn*15,false,'#aaa395');
+  }
+  /* points */
+  const entries=[...lay.pos.entries()];
+  const info=entries.map(([st,p])=>{
+    const i=sim.idxOf.get(st),ghost=!!p.ghost||i===undefined;
+    const st8=ghost?'ghost':i<=doneUntil?'passed':i===nextI?'next':i===hereI?'here':'up';
+    return{st,p,i,ghost,st8};
+  });
+  for(const e of info)dotA(m,e.st,e.p,e.st8,!e.ghost&&(e.i===0||e.i===last));
+  for(const e of info)corrIcons(m,e.st,e.p.x,e.p.y+14,e.st8==='passed'||e.st8==='ghost'?0.5:1,sim.dir);
+  for(const e of info){
+    let style;
+    if(e.ghost)style='ghost';
+    else if(e.i===nextI||e.i===hereI)style=(e.i===last||(e.i===0&&e.i===hereI))?'pillBlack':'pillWhite';
+    else if(e.i<=doneUntil)style=e.i===0?'pillGrey':'passed';
+    else style=e.i===last?'pillBlack':'up';
+    labelA(m,e.st,e.p,style,M);
+  }
+  /* point bleu + flèche */
+  const a=S('g',{},m);
+  S('circle',{r:10.5,fill:NAVY},a);
+  S('path',{d:'M-5,0H4.5M0.5,-4.5L5,0L0.5,4.5',fill:'none',stroke:'#fff','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round'},a);
+  dyn.arrow=a;
+  if(trav){const q=ptAt(lay.pts,sim.cum,d0);a.setAttribute('transform','translate('+q.x+','+q.y+')');}
+  else a.setAttribute('display','none');
+  dyn.update=t=>{
+    const d=sim.D[cur]+(sim.D[cur+1]-sim.D[cur])*ease(t),q=ptAt(lay.pts,sim.cum,d);
+    a.setAttribute('transform','translate('+q.x+','+q.y+')');
+    dyn.grey.setAttribute('points',ptsStr(partial(lay.pts,sim.cum,d)));
+  };
+  gapBar(g);
+}
+
+/* =====================================================================
+   ÉCRAN : PROCHAINS ARRÊTS (mode C)
+   ===================================================================== */
+function drawMapC(g){
+  const M=metrics(),col=sim.line.color,stops=sim.stops,last=stops.length-1;
+  const cur=sim.idx,trav=sim.phase==='travel';
+  const doneUntil=trav?cur:cur-1,nextI=trav?cur+1:-1,hereI=trav?-1:cur;
+  chrome(g,{band:'#fff',bg:'#d9d9d9',dir:true});
+  const start=Math.max(0,Math.min(cur,last-1)),r=last-start,idxs=[];
+  if(r+1<=7){for(let i=start;i<=last;i++)idxs.push(i);}
+  else{for(let i=start;i<start+6;i++)idxs.push(i);idxs.push(last);}
+  const brk=r+1>7,n=idxs.length,fs=M.fsC,lh=fs*1.08,YL=160,BASE=128;
+  const lab=i=>{const s=stops[i];return s.lines&&s.lines.length>1?s.lines:[s.name];};
+  const wOf=i=>Math.max.apply(null,lab(i).map(l=>tw(l,fs,700)));
+  const termW=wOf(last)+30,xe=Math.min(2406,2558-termW+13),x0=189;
+  const xs=idxs.map((_,k)=>x0+k*(xe-x0)/(n-1));
+  for(let k=1;k<n-1;k++){
+    const pw=wOf(idxs[k])+30,xl=xs[k]-12;
+    if(xl<GAP1&&xl+pw>GAP0-8)xs[k]=GAP1+24;
+    xs[k]=Math.max(xs[k],xs[k-1]+80);
+  }
+  const m=S('g',{},g);
+  S('line',{x1:100,y1:YL,x2:xs[n-1],y2:YL,stroke:col,'stroke-width':11},m);
+  const kCur=Math.max(0,idxs.indexOf(cur));
+  dyn.grey=S('line',{x1:100,y1:YL,x2:trav?xs[0]:xs[kCur],y2:YL,stroke:TRACK,'stroke-width':11},m);
+  if(brk){
+    const bx=(xs[n-2]+xs[n-1])/2;
+    S('path',{d:'M'+(bx-7)+','+(YL+14)+'L'+(bx-1)+','+(YL-14)+'M'+(bx+7)+','+(YL+14)+'L'+(bx+13)+','+(YL-14),stroke:'#d9d9d9','stroke-width':5,fill:'none'},m);
+  }
+  /* pastilles / libellés */
+  idxs.forEach((i,k)=>{
+    const s=stops[i],x=xs[k],lines=lab(i),isLast=i===last;
+    const st8=i<=doneUntil?'passed':i===nextI?'next':i===hereI?'here':'up';
+    const pill=st8==='next'||st8==='here'||isLast;
+    if(pill){
+      const w=wOf(i)+30,bg=isLast?'#000':'#fff',fg=isLast?'#fff':'#000';
+      const top=BASE-(lines.length-1)*lh-fs*0.72-(isLast?8:7),bot=BASE+(isLast?9:6);
+      const px=Math.min(x-12-(isLast?1:0),2558-w);
+      S('rect',{x:px,y:top,width:w,height:bot-top,rx:Math.min(16,(bot-top)/2),fill:bg},m);
+      S('rect',{x:x-12,y:bot-6,width:24,height:152-(bot-6),fill:bg},m);
+      S('circle',{cx:x,cy:YL,r:14,fill:bg},m);
+      lines.forEach((l,j)=>S('text',{x:px+14,y:BASE-(lines.length-1-j)*lh,'font-size':fs,'font-weight':700,fill:fg,'font-family':FONT},m,l));
+    }else{
+      const fill=st8==='passed'?'#8d8d8d':NAVY;
+      lines.forEach((l,j)=>S('text',{x:x-11,y:BASE-(lines.length-1-j)*lh,'font-size':fs,'font-weight':700,fill,'font-family':FONT},m,l));
+    }
+  });
+  idxs.forEach((i,k)=>{
+    const s=stops[i],x=xs[k],isLast=i===last;
+    const st8=i<=doneUntil?'passed':i===nextI?'next':i===hereI?'here':'up';
+    if(st8==='passed')S('circle',{cx:x,cy:YL,r:9,fill:'#c9c2b0',stroke:'#fff','stroke-width':2.5},m);
+    else if(st8==='next')S('circle',{cx:x,cy:YL,r:10,fill:col,stroke:'#000','stroke-width':2.5,style:'animation:blink 1s steps(1,end) infinite;--c:'+col},m);
+    else if(st8==='here')S('circle',{cx:x,cy:YL,r:10,fill:col,stroke:'#000','stroke-width':2.5},m);
+    else if(isLast){S('circle',{cx:x,cy:YL,r:10.5,fill:'#fff',stroke:'#000','stroke-width':3},m);S('circle',{cx:x,cy:YL,r:4,fill:col},m);}
+    else if(hasCorr(s))S('circle',{cx:x,cy:YL,r:9.5,fill:'#fff',stroke:'#000','stroke-width':2.5},m);
+    else S('circle',{cx:x,cy:YL,r:8.5,fill:col,stroke:'#fff','stroke-width':2.5},m);
+  });
+  const a=S('g',{},m);
+  S('circle',{r:16.5,fill:NAVY},a);
+  S('path',{d:'M-8,0H7M1,-7L8,0L1,7',fill:'none',stroke:'#fff','stroke-width':3.2,'stroke-linecap':'round','stroke-linejoin':'round'},a);
+  dyn.arrow=a;
+  if(trav)a.setAttribute('transform','translate('+xs[0]+','+YL+')');else a.setAttribute('display','none');
+  dyn.update=t=>{
+    const ax=xs[0]+ease(t)*(xs[1]-xs[0]);
+    a.setAttribute('transform','translate('+ax+','+YL+')');dyn.grey.setAttribute('x2',ax);
+  };
+  gapBar(g);
+}
+
+/* =====================================================================
+   RENDU + MOTEUR
+   ===================================================================== */
+function effView(){return sim.view==='alt'?((Math.floor(sim.runT/12)%2)?'C':'A'):sim.view;}
+function rebuild(fade){
+  const svg=$('#stage');svg.innerHTML='';dyn={};
+  const g=S('g',{},svg);
+  if(sim.stage==='welcome')drawWelcome(g);
+  else if(sim.stage==='dir')drawBig(g);
+  else{sim.curView=effView();if(sim.curView==='C')drawMapC(g);else drawMapA(g);}
+  if(fade&&svg.animate)svg.animate([{opacity:0},{opacity:1}],{duration:380});
+  updateInfo();
+}
+function updateInfo(){
+  const el=$('#info');if(!el||!sim.stops)return;
+  if(sim.stage==='welcome'||sim.stage==='dir')el.textContent='Ligne '+sim.line.index+' → '+sim.termName;
+  else el.textContent='Arrêt '+(sim.idx+1)+'/'+sim.stops.length+' · '+sim.stops[sim.idx].name+(sim.phase==='travel'?' → '+sim.stops[sim.idx+1].name:'');
+}
+function go(stage){sim.stage=stage;sim.stageT=0;rebuild(true);}
+function beginRun(){sim.idx=0;sim.phase='dwell';sim.phaseT=0;sim.runT=0;go('run');}
+
+function tick(dt0){
+  if(sim.paused||!sim.stops)return;
+  const dt=dt0*sim.speed;sim.stageT+=dt;
+  if(sim.stage==='welcome'){if(sim.stageT>=T_WELCOME)go('dir');}
+  else if(sim.stage==='dir'){if(sim.stageT>=T_DIR)beginRun();}
+  else if(sim.stage==='run'){
+    sim.runT+=dt;sim.phaseT+=dt;
+    const last=sim.stops.length-1;
+    if(sim.phase==='dwell'){
+      if(sim.phaseT>=opts.dwell){
+        if(sim.idx>=last){sim.stage='end';sim.stageT=0;}
+        else{sim.phase='travel';sim.phaseT=0;rebuild();}
+      }
+    }else{
+      const t=sim.phaseT/opts.travel;
+      if(t>=1){sim.idx++;sim.phase='dwell';sim.phaseT=0;rebuild();}
+      else if(dyn.update)dyn.update(t);
+    }
+    if(sim.stage==='run'&&sim.view==='alt'&&effView()!==sim.curView)rebuild(true);
+  }else if(sim.stage==='end'){
+    if(sim.stageT>=T_END&&opts.loop){setup(sim.line,sim.dir^1);go('welcome');}
+  }
+}
+function stepNext(){
+  if(sim.stage==='welcome'||sim.stage==='dir'){beginRun();return;}
+  if(sim.stage==='end')return;
+  const last=sim.stops.length-1;
+  if(sim.phase==='travel')sim.idx++;else if(sim.idx<last)sim.idx++;
+  sim.phase='dwell';sim.phaseT=0;rebuild();
+}
+function stepPrev(){
+  if(sim.stage==='welcome'||sim.stage==='dir')return;
+  const last=sim.stops.length-1;
+  if(sim.stage==='end'){sim.stage='run';sim.idx=Math.max(0,last-1);}
+  else if(sim.phase!=='travel')sim.idx=Math.max(0,sim.idx-1);
+  sim.phase='dwell';sim.phaseT=0;rebuild();
+}
+let lastTs=0;
+function frame(ts){
+  const dt=Math.min(0.1,((ts-lastTs)/1000)||0);lastTs=ts;
+  if(running)tick(dt);
+  requestAnimationFrame(frame);
+}
+
+/* =====================================================================
+   PLAYER : mise à l'échelle, barre, clavier
+   ===================================================================== */
+function fitStage(){
+  const box=$('#stageBox'),svg=$('#stage');
+  const s=sim.size==='fit'?Math.min(innerWidth/W,(innerHeight-8)/H):1;
+  box.style.width=(W*s)+'px';box.style.height=(H*s)+'px';
+  svg.style.transform='scale('+s+')';
+}
+let hideTimer=null;
+function showBar(){
+  const b=$('#bar');b.classList.remove('hide');clearTimeout(hideTimer);
+  hideTimer=setTimeout(()=>{if(running)b.classList.add('hide');},3200);
+}
+function openPlayer(){
+  const line=currentLine();
+  opts.travel=Math.max(2,+$('#optTravel').value||7);
+  opts.dwell=Math.max(1,+$('#optDwell').value||3.5);
+  opts.loop=$('#optLoop').checked;
+  opts.timeMode=$('#optTime').value;opts.fixed=$('#optFixed').value||'14:32';
+  sim.view=$('#optView').value;sim.speed=1;sim.paused=false;
+  $('#bView').value=sim.view;$('#bSpeed').value='1';$('#bPlay').textContent='⏸';
+  setup(line,+$('#optDir').value||0);
+  $('#home').style.display='none';$('#player').classList.add('on');
+  running=true;fitStage();rebuild(true);showBar();
+}
+function closePlayer(){
+  running=false;$('#player').classList.remove('on');$('#home').style.display='';
+  if(document.fullscreenElement)document.exitFullscreen();
+}
+function togglePause(){sim.paused=!sim.paused;$('#bPlay').textContent=sim.paused?'▶':'⏸';}
+function toggleFs(){
+  if(document.fullscreenElement)document.exitFullscreen();
+  else document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();
+}
+
+/* =====================================================================
+   ACCUEIL : cartes, import, réglages
+   ===================================================================== */
+const BUILTIN=[LINE1,LINE10,LINE14].map(normalizeLine);
+let custom=[],selectedId='10';
+function loadCustom(){
+  try{const raw=localStorage.getItem('saeiv.custom');if(raw){custom=JSON.parse(raw).map(normalizeLine);}}catch(e){custom=[];}
+}
+function saveCustom(){try{localStorage.setItem('saeiv.custom',JSON.stringify(custom));}catch(e){}}
+const allLines=()=>BUILTIN.concat(custom);
+function currentLine(){return allLines().find(l=>l.id===selectedId)||BUILTIN[1];}
+
+function miniSvg(line){
+  const svg=S('svg',{class:'mini',viewBox:'0 0 240 22',preserveAspectRatio:'none'});
+  const stops=stopsOf(toNodes(line,0)),n=stops.length;
+  S('rect',{x:6,y:9.5,width:228,height:3,rx:1.5,fill:line.color},svg);
+  stops.forEach((s,i)=>{
+    const x=6+i*228/(n-1);
+    S('circle',{cx:x,cy:11,r:hasCorr(s)?2.7:2,fill:hasCorr(s)?'#fff':line.color,stroke:hasCorr(s)?'#111':'none','stroke-width':1},svg);
+  });
+  return svg;
+}
+function renderCards(){
+  const box=$('#cards');box.innerHTML='';
+  for(const l of allLines()){
+    const c=document.createElement('div');c.className='card'+(l.id===selectedId?' sel':'');
+    const top=document.createElement('div');top.className='top';
+    const b=S('svg',{viewBox:'0 0 128 56',width:112,height:49});
+    roundel(b,28,28,24);indexBadge(b,88,28,24,l);
+    top.appendChild(b);
+    const meta=document.createElement('div');
+    meta.innerHTML='<b>Ligne '+esc(l.index)+'</b><small>'+esc(l.termA)+' ⇄ '+esc(l.termB)+'</small>';
+    top.appendChild(meta);c.appendChild(top);c.appendChild(miniSvg(l));
+    if(custom.indexOf(l)>=0){
+      const d=document.createElement('button');d.className='del';d.title='Supprimer';d.textContent='×';
+      d.onclick=ev=>{ev.stopPropagation();custom=custom.filter(x=>x!==l);saveCustom();if(selectedId===l.id)selectedId='10';renderCards();refreshDirOptions();};
+      c.appendChild(d);
+    }
+    c.onclick=()=>{selectedId=l.id;renderCards();refreshDirOptions();};
+    box.appendChild(c);
+  }
+  $('#selName').textContent='Ligne sélectionnée : '+currentLine().index;
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function refreshDirOptions(){
+  const l=currentLine(),sel=$('#optDir'),old=sel.value;
+  sel.innerHTML='';
+  [l.termB,l.termA].forEach((t,i)=>{const o=document.createElement('option');o.value=i;o.textContent='Direction '+t;sel.appendChild(o);});
+  if(old==='1')sel.value='1';
+}
+function msg(t,ok){const m=$('#msg');m.textContent=t;m.className=ok?'ok':'err';}
+function importText(text,label){
+  let obj;
+  try{obj=JSON.parse(text);}catch(e){msg((label?label+' : ':'')+'JSON invalide ('+e.message+')',false);return false;}
+  const list=Array.isArray(obj)?obj:[obj];let added=0;
+  try{
+    for(const o of list){
+      const l=normalizeLine(o);
+      custom=custom.filter(x=>x.id!==l.id);
+      if(BUILTIN.some(b=>b.id===l.id))l.id=l.id+'-perso';
+      custom.push(l);selectedId=l.id;added++;
+    }
+  }catch(e){msg((label?label+' : ':'')+e.message,false);return false;}
+  saveCustom();renderCards();refreshDirOptions();
+  msg(added+' ligne(s) importée(s) : ligne '+currentLine().index+' sélectionnée.',true);
+  return true;
+}
+function readFiles(files){
+  for(const f of files){const r=new FileReader();r.onload=()=>importText(r.result,f.name);r.readAsText(f);}
+}
+
+function initHome(){
+  loadCustom();renderCards();refreshDirOptions();
+  $('#btnStart').onclick=openPlayer;
+  $('#btnLoad').onclick=()=>{const t=$('#jsonText').value.trim();if(!t){msg('Colle un JSON ou choisis un fichier.',false);return;}importText(t);};
+  $('#file').onchange=e=>readFiles(e.target.files);
+  $('#btnTpl').onclick=()=>{
+    const blob=new Blob([JSON.stringify(LINE10,null,2)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ligne-10.json';a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  };
+  const dz=$('#drop');
+  ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over');}));
+  dz.addEventListener('drop',e=>readFiles(e.dataTransfer.files));
+  /* barre du player */
+  $('#bHome').onclick=closePlayer;
+  $('#bRestart').onclick=()=>{setup(sim.line,sim.dir);go('welcome');};
+  $('#bPrev').onclick=stepPrev;$('#bNext').onclick=stepNext;$('#bPlay').onclick=togglePause;
+  $('#bSpeed').onchange=e=>{sim.speed=+e.target.value;};
+  $('#bView').onchange=e=>{sim.view=e.target.value;if(sim.stage==='run'||sim.stage==='end')rebuild(true);};
+  $('#bDir').onclick=()=>{setup(sim.line,sim.dir^1);go('welcome');};
+  $('#bSize').onclick=()=>{sim.size=sim.size==='fit'?'real':'fit';fitStage();};
+  $('#bFs').onclick=toggleFs;
+  $('#player').addEventListener('mousemove',showBar);
+  $('#player').addEventListener('touchstart',showBar,{passive:true});
+  addEventListener('resize',fitStage);
+  addEventListener('keydown',e=>{
+    if(!running)return;
+    if(e.target&&/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;
+    if(e.code==='Space'){e.preventDefault();togglePause();}
+    else if(e.key==='ArrowRight')stepNext();
+    else if(e.key==='ArrowLeft')stepPrev();
+    else if(e.key==='f'||e.key==='F')toggleFs();
+    else if(e.key==='Escape'&&!document.fullscreenElement)closePlayer();
+    showBar();
+  });
+  setInterval(()=>{document.querySelectorAll('.clock').forEach(e=>{e.textContent=timeStr();});},1000);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{if(running)rebuild();});
+  requestAnimationFrame(frame);
+}
+initHome();
+</script>
+</body>
+</html>
